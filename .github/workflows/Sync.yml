@@ -38,8 +38,8 @@ jobs:
 
     - name: Ensure app and changed directories exist
       run: |
-        mkdir -p app
-        mkdir -p changed
+        mkdir -p ./app
+        mkdir -p ./changed
 
     - name: Archive changed directories
       run: |
