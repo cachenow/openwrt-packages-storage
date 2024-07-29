@@ -1,0 +1,90 @@
+name: Sync OpenWrt Packages
+
+on: 
+  repository_dispatch:
+  workflow_dispatch:
+
+# 定时触发编译
+  schedule:
+    - cron: 0 4,8,12,16,20 * * *
+
+jobs:
+  sync-openwrt-packages:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Git
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        sudo timedatectl set-timezone "Asia/Shanghai"
+
+    - name: Delete workflow runs
+      uses: GitRML/delete-workflow-runs@main
+      continue-on-error: true
+      with:
+        retain_days: 1
+        keep_minimum_runs: 0  
+
+    - name: Clone OpenWrt Packages
+      run: git clone https://github.com/kiddin9/openwrt-packages.git openwrt-packages
+
+    - name: Remove . files and directories
+      run: |
+        find ./openwrt-packages -path '*/.*' -delete
+
+    - name: Ensure app and changed directories exist
+      run: |
+        mkdir -p app
+        mkdir -p changed
+
+    - name: Archive changed directories
+      run: |
+        # Function to compare directories and archive if changed
+        compare_and_archive() {
+          local src=$1
+          local dest=$2
+          local base_name=$(basename "$src")
+          local timestamp=$(date +'%Y%m%d%H%M%S')
+          local changed_dir="changed/${base_name}_${timestamp}"
+
+          # Generate file and directory lists
+          src_list=$(find "$src" | sed "s|^$src/||" | sort)
+          dest_list=$(find "$dest" | sed "s|^$dest/||" | sort)
+
+          # Compare lists
+          if [ "$src_list" != "$dest_list" ]; then
+            # If there are differences, move the whole directory to changed
+            mkdir -p "$changed_dir"
+            mv "$dest" "$changed_dir/"
+          fi
+        }
+
+        # Compare and archive for each directory in openwrt-packages
+        for src_dir in openwrt-packages/*; do
+          base_name=$(basename "$src_dir")
+          compare_and_archive "$src_dir" "app/$base_name"
+        done
+
+    - name: Sync to app directory
+      run: |
+        rsync -av --delete --exclude='.*' openwrt-packages/ app/
+
+    - name: Delete openwrt-packages directory
+      run: rm -rf openwrt-packages
+
+    - name: Ensure changed directory exists
+      run: touch changed/.gitkeep
+
+    - name: Check for changes
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          git add .
+          git commit -m "🔥最后同步时间为 $(date +'%Y-%m-%d %H:%M:%S')"
+          git push
+        else
+          echo "No changes detected"
+        fi
