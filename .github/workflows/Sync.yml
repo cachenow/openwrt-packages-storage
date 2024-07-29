@@ -38,8 +38,8 @@ jobs:
 
     - name: Ensure app and changed directories exist
       run: |
-        mkdir -p ./app
-        mkdir -p ./changed
+        mkdir -p app
+        mkdir -p changed
 
     - name: Archive changed directories
       run: |
@@ -53,13 +53,19 @@ jobs:
 
           # Generate file and directory lists
           src_list=$(find "$src" | sed "s|^$src/||" | sort)
-          dest_list=$(find "$dest" | sed "s|^$dest/||" | sort)
+          if [ -d "$dest" ]; then
+            dest_list=$(find "$dest" | sed "s|^$dest/||" | sort)
+          else
+            dest_list=""
+          fi
 
           # Compare lists
           if [ "$src_list" != "$dest_list" ]; then
             # If there are differences, move the whole directory to changed
-            mkdir -p "$changed_dir"
-            mv "$dest" "$changed_dir/"
+            if [ -d "$dest" ]; then
+              mkdir -p "$changed_dir"
+              mv "$dest" "$changed_dir/"
+            fi
           fi
         }
 
