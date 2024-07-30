@@ -1,0 +1,38 @@
+#!/usr/bin/lua
+
+-- Our dependencies:
+require "nixio"
+require "luci.sys"
+require "luci.jsonc"
+DIR = '/etc/squid/cert'
+parser = luci.jsonc.new() 
+
+-- Our header:
+print("Content-Type: text/plain;\n\n")
+
+-- Get HTTP headers and POST data:
+http_headers = nixio.getenv()	-- NOTE TO SELF: Next command doesn't work without this one....
+post = luci.jsonc.parse(io.read("*all"))
+
+-- Make sure token passed is valid:
+post.token = luci.sys.exec("ubus call session list | grep " .. post.token)
+if (post.token == '') then
+	print("Invalid token passed!")
+	exit(0)
+end
+
+-- Set defaults if element is not set:
+post.bits = post.bits or '2048'
+post.days = post.days or '3650'
+post.C = post.C or 'XX'
+post.ST = post.ST or 'Unspecified'
+post.L = post.L or 'Unspecified'
+post.O = post.O or 'OpenWrt Router'
+
+-- Generate OpenSSL certificates:
+print( luci.sys.exec('mkdir -p ' .. DIR) )
+print( luci.sys.exec('openssl req -new -x509 -newkey rsa:' .. post.bits .. ' -days ' .. post.days .. ' -nodes -keyout ' .. DIR .. '/ca.key  -out ' .. DIR .. '/ca.pem -subj "' .. '/C=' .. post.C .. '/ST=' .. post.ST .. '/L=' .. post.L .. '/O=' .. post.O .. '"' .. ' 2>&1') )
+print( luci.sys.exec('openssl x509 -in ' .. DIR ..'/ca.pem -outform DER -out ' .. DIR .. '/ca.der' .. ' 2>&1') )
+print( luci.sys.exec('openssl pkcs12 -export -out ' .. DIR .. '/ca.p12 -in ' .. DIR .. '/ca.pem -inkey ' .. DIR .. '/ca.key -passout pass: -nokeys' .. ' 2>&1') )
+print( luci.sys.exec('chmod 0644 ' .. DIR .. '/ca.*') )
+print( luci.sys.exec('chmod 0600 ' .. DIR .. '/ca.key') )

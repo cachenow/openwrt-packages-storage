@@ -1,5 +1,5 @@
 # alwaysonline by Jamesits <https://github.com/Jamesits/alwaysonline>
-# Copyright (C) 2023 muink <https://github.com/muink>
+# Copyright (C) 2023-2024 muink <https://github.com/muink>
 #
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
@@ -10,7 +10,7 @@ PKG_NAME:=luci-app-alwaysonline
 
 LUCI_TITLE:=LuCI Support for alwaysonline
 LUCI_PKGARCH:=all
-LUCI_DEPENDS:=
+LUCI_DEPENDS:=+uci-alwaysonline
 
 LUCI_DESCRIPTION:=Hijack/bypass Windows NCSI and iOS portal detection
 
