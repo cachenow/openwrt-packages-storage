@@ -1,10 +1,6 @@
-# luci-app-squid-adv
+# luci-app-nodogsplash
 
-Package for luci-app-squid-adv for OpenWRT
-
-Compiled version v1.0: [luci-app-squid-adv_1.0_all.ipk](https://github.com/xptsp/openwrt-packages/releases/download/luci-app-squid-adv_1.0/luci-app-squid-adv_1.0_all.ipk)
-
-sha256sum hash: **fe0ff90d2d90b54fe51d7bc37b4b6b0cf5047d491e586af4b714228d7adbf2bd**
+Package for luci-app-nodogsplash for OpenWRT
 
 ### Status Tab
 ![Status Tab](https://github.com/xptsp/luci-app-squid-adv/blob/main/.github/images/general.png?raw=true)
