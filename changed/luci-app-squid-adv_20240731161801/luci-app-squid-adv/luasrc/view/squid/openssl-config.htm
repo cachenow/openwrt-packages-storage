@@ -1,0 +1,59 @@
+<script type="text/javascript">//<![CDATA[
+	function Get_Dates() {
+		const http = new XMLHttpRequest()
+		http.open('GET', "<%=url([[admin]], [[services]], [[squid]], [[dates]])%>", true);
+		http.onload = function() {
+			data = JSON.parse(this.responseText);
+			document.getElementById("widget.cbid.squid.squid._notBefore").value = data.notBefore;
+			document.getElementById("widget.cbid.squid.squid._notAfter").value = data.notAfter;
+		};
+		http.send();
+	}
+	function Generate_Now() {
+		if (document.getElementById("widget.cbid.squid.squid._notBefore").value != '<%:Invalid%>') {
+			if (!confirm("<%:A valid certificate already exists.\nPress Ok to overwrite!%>")) { return; }
+		}
+		showModal("<%:Please wait while OpenSSL Certificates are Generated!%>");
+		const http = new XMLHttpRequest()
+		http.open('POST', "/cgi-bin/squid", true);
+		http.onload = function() {
+			alert(this.responseText);
+			hideModal();
+			Get_Dates();
+		};
+		http.send(JSON.stringify({
+			bits: document.getElementById("widget.cbid.squid.squid.openssl_rsa_key_bits").value,
+			days: document.getElementById("widget.cbid.squid.squid.openssl_days").value,
+    		C: document.getElementById("widget.cbid.squid.squid.openssl_countryName").value,
+    		ST: document.getElementById("widget.cbid.squid.squid.openssl_stateOrProvinceName").value,
+    		L: document.getElementById("widget.cbid.squid.squid.openssl_localityName").value,    		 
+    		O: document.getElementById("widget.cbid.squid.squid.openssl_organizationName").value
+		}));
+	}
+	function Populate_Now() {
+		const http = new XMLHttpRequest()
+		http.open('GET', "<%=url([[admin]], [[services]], [[squid]], [[ipinfo]])%>", true);
+		http.onload = function() {
+			data = JSON.parse(this.responseText);
+			document.getElementById("widget.cbid.squid.squid.openssl_countryName").value = data.country;
+			document.getElementById("widget.cbid.squid.squid.openssl_stateOrProvinceName").value = data.region;
+			document.getElementById("widget.cbid.squid.squid.openssl_localityName").value = data.city;
+		};
+		http.send();
+	}
+</script>
+<div class="cbi-value">
+	<label class="cbi-value-title"><%:Generate Certificates%></label>
+	<div class="cbi-value-field">
+		<button onclick="Generate_Now(); return false;"><%:Generate Now%></button>
+	</div>
+</div>
+<div class="cbi-value">
+	<label class="cbi-value-title"><h5><%:OpenSSL Configuration%></h5></label>
+</div>
+<div class="cbi-value">
+	<label class="cbi-value-title"><%:Auto Populate Fields%></label>
+	<div class="cbi-value-field">
+		<button onclick="Populate_Now(); return false;"><%:Populate Now%></button>
+	</div>
+</div>
