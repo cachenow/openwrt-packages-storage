@@ -1011,7 +1011,8 @@ function handleOpkg(ev)
 
 		fs.exec_direct('/usr/libexec/opkg-call', argv, 'json').then(function(res) {
 			dlg.removeChild(dlg.lastChild);
-
+			var showModalFlag = cmd !== 'update' && !res.stderr;
+			if (showModalFlag) {
 			if (res.stdout)
 				dlg.appendChild(E('pre', [ res.stdout ]));
 
@@ -1039,6 +1040,10 @@ function handleOpkg(ev)
 							resolveFn(res);
 					}, this, res)
 				}, _('Dismiss'))));
+			} else {
+				ui.hideModal();
+				updateLists();
+			}
 		}).catch(function(err) {
 			ui.addNotification(null, E('p', _('Unable to execute <em>opkg %s</em> command: %s').format(cmd, err)));
 			ui.hideModal();
@@ -1099,7 +1104,7 @@ function updateLists(data)
 
 	return (data ? Promise.resolve(data) : downloadLists()).then(function(data) {
 		var pg = document.querySelector('.cbi-progressbar'),
-		    mount = L.toArray(data[0].filter(function(m) { return m.mount == '/' || m.mount == '/overlay' }))
+			mount = L.toArray(data[0].filter(function(m) { return m.mount == '/' || m.mount == '/overlay' }))
 				.sort(function(a, b) { return a.mount > b.mount })[0] || { size: 0, free: 0 };
 
 		pg.firstElementChild.style.width = Math.floor(mount.size ? (100 / mount.size) * (mount.size - mount.free) : 100) + '%';
