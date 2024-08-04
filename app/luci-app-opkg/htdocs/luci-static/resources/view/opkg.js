@@ -1011,7 +1011,7 @@ function handleOpkg(ev)
 
 		fs.exec_direct('/usr/libexec/opkg-call', argv, 'json').then(function(res) {
 			dlg.removeChild(dlg.lastChild);
-			var showModalFlag = cmd !== 'update' && !res.stderr;
+			var showModalFlag = (cmd !== 'update' && pkg) || res.stderr;
 			if (showModalFlag) {
 			if (res.stdout)
 				dlg.appendChild(E('pre', [ res.stdout ]));
