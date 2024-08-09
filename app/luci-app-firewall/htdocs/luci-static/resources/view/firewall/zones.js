@@ -67,7 +67,7 @@ return view.extend({
 		o.rmempty = false;
 		o.default = '0';
 
-		o = s.option(form.Value, 'export', _('WAN Ports to Expose'), _('Multiple ports, separated by spaces, format: 80 81 82'));
+		o = s.option(form.Value, 'export', _('Ports to Expose'), _('Multiple ports can be, separated by spaces, format: 80 81 82'));
 		o.depends('expose_wan', '1');
 		o.rmempty = true;
 		o.datatype = 'portlist';
