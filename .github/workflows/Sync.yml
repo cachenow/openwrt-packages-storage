@@ -22,13 +22,6 @@ jobs:
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         sudo timedatectl set-timezone "Asia/Shanghai"
 
-    - name: Delete workflow runs
-      uses: GitRML/delete-workflow-runs@main
-      continue-on-error: true
-      with:
-        retain_days: 1
-        keep_minimum_runs: 0  
-
     - name: Clone OpenWrt Packages
       run: git clone https://github.com/kiddin9/openwrt-packages.git openwrt-packages
 
@@ -94,3 +87,10 @@ jobs:
         else
           echo "No changes detected"
         fi
+
+    - name: Delete workflow runs
+      uses: GitRML/delete-workflow-runs@main
+      continue-on-error: true
+      with:
+        retain_days: 1
+        keep_minimum_runs: 0  
