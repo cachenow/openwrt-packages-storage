@@ -101,11 +101,15 @@ return view.extend({
 		o.default = o.disabled;
 		o.rmempty = false;
 
-		o = s.option(form.Value, 'def_tcp_stun', _('Default ') + _('TCP STUN ') + _('Server'));
+		o = s.option(form.Value, 'def_tcp_stun', _('Default ') + _('TCP STUN ') + _('Server'),
+			_('Available server <a href="%s" target="_blank">references</a>')
+				.format(_('https://github.com/muink/rfc5780-stun-server/blob/master/valid_hosts_rfc5780.txt')));
 		o.datatype = 'or(hostname, hostport)';
 		o.rmempty = false;
 
-		o = s.option(form.Value, 'def_udp_stun', _('Default ') + _('UDP STUN ') + _('Server'));
+		o = s.option(form.Value, 'def_udp_stun', _('Default ') + _('UDP STUN ') + _('Server'),
+			_('Available server <a href="%s" target="_blank">references</a>')
+				.format(_('https://github.com/muink/rfc5780-stun-server/blob/master/valid_hosts_rfc5780_tcp.txt')));
 		o.datatype = 'or(hostname, hostport)';
 		o.rmempty = false;
 
@@ -133,9 +137,6 @@ return view.extend({
 		o.placeholder = 3445;
 		o.rmempty = false;
 		o.validate = function(section_id, value) {
-			if (value == null || value == '' || value == 'ignore')
-				return _('Expecting: non-empty value');
-
 			let conf = 'firewall';
 			let fw_forwards = uci.sections(conf, 'redirect');
 			let fw_rules = uci.sections(conf, 'rule');
@@ -240,6 +241,7 @@ return view.extend({
 		s.sortable  = true;
 		s.addremove = true;
 		s.anonymous = true;
+		s.nodescriptions = true;
 
 		s.tab('general', _('General Settings'));
 		s.tab('forward', _('Forward Settings'));
@@ -302,9 +304,19 @@ return view.extend({
 		o.nocreate = false;
 		o.rmempty = true;
 
-		o = s.taboption('general', form.Value, 'port', _('Bind port'));
-		o.datatype = "and(port, min(1))";
+		o = s.taboption('general', form.Value, 'port', _('Bind port'),
+			_('Note: After using <code>portrange</code>, the public ports will be opened in rotation</br>') +
+			_('If you enable <b>Notify Scripts</b>, you will be bombarded with messages'));
+		o.datatype = "or(port, portrange)";
 		o.rmempty = false;
+		o.validate = function(section_id, value) {
+			let regexp = new RegExp(/^([1-9]\d*)(-([1-9]\d*))*$/)
+
+			if (!regexp.test(value))
+				return _('Expecting: %s').format(_('Non-0 port'));
+
+			return true;
+		};
 
 		o = s.taboption('forward', form.Flag, 'forward', _('Forward mode'));
 		o.default = o.disabled;
@@ -338,9 +350,6 @@ return view.extend({
 		o.depends('forward', '1');
 		o.modalonly = true;
 		o.validate = function(section_id, value) {
-			if (value == null || value == '' || value == 'ignore')
-				return _('Expecting: non-empty value');
-
 			let family = L.bind(function() {
 				let E = document.getElementById('widget.' + this.cbid(section_id).match(/.+\./) + 'family');
 				let i = E ? E.selectedIndex : null;
@@ -516,9 +525,9 @@ return view.extend({
 
 		o = s.taboption('notify', form.DynamicList, 'notify_tokens', _('Tokens'),
 			_('The KEY required by the script above. ' +
-				'See <a href="%s" target="_blank">%s*</a> for the format of KEY required by each script. ' +
+				'See <a href="%s" target="_blank">%s</a> for the format of KEY required by each script. ' +
 				'Add multiple entries here in KEY=VAL shell variable format to supply multiple KEY variables.')
-			.format('https://github.com/muink/openwrt-natmapt/tree/master/files/notify/'));
+			.format('https://github.com/muink/openwrt-natmapt/tree/master/files/notify/', _('<code># All external tokens required</code> Field')));
 		o.datatype = 'list(string)';
 		o.placeholder = 'KEY=VAL';
 		o.rmempty = true;
@@ -552,9 +561,9 @@ return view.extend({
 
 		o = s.taboption('ddns', form.DynamicList, 'ddns_tokens', _('Tokens'),
 			_('The KEY required by the script above. ' +
-				'See <a href="%s" target="_blank">%s*</a> for the format of KEY required by each script. ' +
+				'See <a href="%s" target="_blank">%s</a> for the format of KEY required by each script. ' +
 				'Add multiple entries here in KEY=VAL shell variable format to supply multiple KEY variables.')
-			.format('https://github.com/muink/openwrt-natmapt/tree/master/files/ddns/'));
+			.format('https://github.com/muink/openwrt-natmapt/tree/master/files/ddns/', _('<code># All external tokens required</code> Field')));
 		o.datatype = 'list(string)';
 		o.placeholder = 'KEY=VAL';
 		o.rmempty = true;

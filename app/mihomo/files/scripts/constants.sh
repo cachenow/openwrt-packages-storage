@@ -6,8 +6,10 @@ MIHOMO_GROUP="mihomo"
 
 # routing
 FW_TABLE="mihomo"
-FW_MARK=80
-ROUTE_TABLE=80
+FW_MARK="0x80"
+FW_MARK_MASK="0xFF"
+RULE_PREF="1024"
+ROUTE_TABLE="80"
 TUN_DEVICE="tun"
 
 # paths
@@ -23,7 +25,6 @@ RUN_UI_DIR="$RUN_DIR/ui"
 
 # scripts
 SH_DIR="$HOME_DIR/scripts"
-UPNP_WATCHER_SH="$SH_DIR/upnp_watcher.sh"
 TUN_SH="$SH_DIR/tun.sh"
 
 # nftables

@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=natmapt
-PKG_VERSION:=20240603
-PKG_RELEASE:=6
+PKG_VERSION:=20240813
+PKG_RELEASE:=9
 
 RAW_NAME:=natmap
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(RAW_NAME)-$(PKG_VERSION)
@@ -67,6 +67,7 @@ define Package/natmapt-scripts/Default
 	TITLE:=NATMap $(1) scripts ($(2))
 	DEPENDS:=+natmapt
 	PROVIDES:=natmapt-$(1)-scripts
+	VERSION:=20240603
 	PKGARCH:=all
 endef
 

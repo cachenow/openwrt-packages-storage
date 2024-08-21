@@ -55,13 +55,9 @@ start_service() {
 	config_get tcp_keep_alive_interval "mixin" "tcp_keep_alive_interval" 600
 	config_get log_level "mixin" "log_level"
 	### external control
-	local ui_razord ui_razord_url ui_yacd ui_yacd_url ui_metacubexd ui_metacubexd_url api_port api_secret selection_cache
-	config_get_bool ui_razord "mixin" "ui_razord" 0
-	config_get ui_razord_url "mixin" "ui_razord_url"
-	config_get_bool ui_yacd "mixin" "ui_yacd" 0
-	config_get ui_yacd_url "mixin" "ui_yacd_url"
-	config_get_bool ui_metacubexd "mixin" "ui_metacubexd" 0
-	config_get ui_metacubexd_url "mixin" "ui_metacubexd_url"
+	local ui_name ui_url api_port api_secret selection_cache
+	config_get ui_name "mixin" "ui_name"
+	config_get ui_url "mixin" "ui_url"
 	config_get api_port "mixin" "api_port" "9090"
 	config_get api_secret "mixin" "api_secret" "666666"
 	config_get_bool selection_cache "mixin" "selection_cache" 0
@@ -111,30 +107,69 @@ start_service() {
 	config_get geoip_asn_url "mixin" "geoip_asn_url"
 	config_get_bool geox_auto_update "mixin" "geox_auto_update" 0
 	config_get geox_update_interval "mixin" "geox_update_interval" "24"
-	# get version
-	local app_version core_version
-	app_version=$(opkg list-installed | grep "luci-app-mihomo" | cut -d " " -f 3)
-	core_version=$(mihomo -v | grep "Mihomo" | cut -d " " -f 3)
-	# download profile
-	log "Download profile."
-	curl -s -o "$RUN_PROFILE_PATH" -L -H "User-Agent: luci-app-mihomo/$app_version mihomo/$core_version clash.meta/$core_version" "$profile"
-	# download ui
-	log "Download UI."
-	download_ui "$ui_razord" "$ui_razord_url" "$RUN_UI_DIR" "Razord-meta-gh-pages" "razord"
-	download_ui "$ui_yacd" "$ui_yacd_url" "$RUN_UI_DIR" "Yacd-meta-gh-pages" "yacd"
-	download_ui "$ui_metacubexd" "$ui_metacubexd_url" "$RUN_UI_DIR" "metacubexd-gh-pages" "metacubexd"
+	# get profile
+	if [[ "$profile" == "file:"* ]]; then
+		local profile_name; profile_name=$(basename ${profile/file:/})
+		cp -f "$PROFILES_DIR/$profile_name" "$RUN_PROFILE_PATH"
+		log "Use Profile: $profile_name"
+	elif [[ "$profile" == "subscription:"* ]]; then
+		local subscription_section; subscription_section="${profile/subscription:/}"
+		# subscription
+		local subscription_name subscription_url subscription_user_agent
+		config_get subscription_name "$subscription_section" "name"
+		config_get subscription_url "$subscription_section" "url"
+		config_get subscription_user_agent "$subscription_section" "user_agent"
+		# convert
+		local subscription_convert subscription_convert_backend subscription_convert_template
+		config_get_bool subscription_convert "$subscription_section" "convert" 0
+		config_get subscription_convert_backend "$subscription_section" "convert_backend"
+		config_get subscription_convert_template "$subscription_section" "convert_template"
+		# convert advanced
+		local subscription_convert_advanced subscription_convert_include subscription_convert_exclude subscription_convert_emoji subscription_convert_insert_node_type
+		config_get_bool subscription_convert_advanced "$subscription_section" "convert_advanced" 0
+		config_get subscription_convert_include "$subscription_section" "convert_include"
+		config_get subscription_convert_exclude "$subscription_section" "convert_exclude"
+		config_get_bool subscription_convert_emoji "$subscription_section" "convert_emoji" 0
+		config_get_bool subscription_convert_insert_node_type "$subscription_section" "convert_insert_node_type" 0
+		# generate url
+		local url
+		if [ "$subscription_convert" == 0 ]; then
+			url="$subscription_url"
+		else
+			url="$subscription_convert_backend?target=clash&url=$(echo -n $subscription_url | yq -M -o uri)"
+			if [ -n "$subscription_convert_template" ]; then
+				url="$url&config=$(echo -n $subscription_convert_template | yq -M -o uri)"
+			fi
+			if [ "$subscription_convert_advanced" == 1 ]; then
+				if [ -n "$subscription_convert_include" ]; then
+					url="$url&include=$(echo -n $subscription_convert_include | yq -M -o uri)"
+				fi
+				if [ -n "$subscription_convert_exclude" ]; then
+					url="$url&exclude=$(echo -n $subscription_convert_exclude | yq -M -o uri)"
+				fi
+				url="$url&emoji=$([ "$subscription_convert_emoji" == 1 ] && echo -n "true" || echo -n "false")"
+				url="$url&append_type=$([ "$subscription_convert_insert_node_type" == 1 ] && echo -n "true" || echo -n "false")"
+			fi
+		fi
+		curl -s -o "$RUN_PROFILE_PATH" -L -H "User-Agent: $subscription_user_agent" "$url"
+		log "Use Subscription: $subscription_name"
+	elif [[ "$profile" == "http:"* || "$profile" == "https:"* ]]; then
+		local url; url=$profile
+		curl -s -o "$RUN_PROFILE_PATH" -L -H "User-Agent: mihomo clash.meta clash" "$url"
+		log "Use Url: $url"
+	fi
 	# mixin
 	if [ "$mixin" == 0 ]; then
 		log "Mixin is disabled, only mixin neccesary config."
 		# do mixin
 		log_level="$log_level" ipv6_proxy="$ipv6_proxy" \
-		ui_path="ui" api_listen="0.0.0.0:$api_port" api_secret="$api_secret" \
+		ui_path="ui" ui_name="$ui_name" ui_url="$ui_url" api_listen="0.0.0.0:$api_port" api_secret="$api_secret" \
 		http_port="$http_port" socks_port="$socks_port" mixed_port="$mixed_port" redir_port="$redir_port" tproxy_port="$tproxy_port" \
 		tun_stack="$tun_stack" tun_device="$TUN_DEVICE" tun_mtu="$tun_mtu" tun_gso="$tun_gso" tun_gso_max_size="$tun_gso_max_size" tun_endpoint_independent_nat="$tun_endpoint_independent_nat" \
 		dns_enable="true" dns_listen="0.0.0.0:$dns_port" \
 		yq -M -i '
 		.log-level = env(log_level) | .ipv6 = env(ipv6_proxy) == 1 |
-		.external-ui = env(ui_path) | .external-controller = env(api_listen) | .secret = env(api_secret) |
+		.external-ui = env(ui_path) | .external-ui-name = env(ui_name) | .external-ui-url = env(ui_url) | .external-controller = env(api_listen) | .secret = env(api_secret) |
 		.port = env(http_port) | .socks-port = env(socks_port) | .mixed-port = env(mixed_port) | .redir-port = env(redir_port) | .tproxy-port = env(tproxy_port) |
 		.tun.stack = env(tun_stack) | .tun.device = env(tun_device) | .tun.mtu = env(tun_mtu) | .tun.gso = env(tun_gso) == 1 | .tun.gso-max-size = env(tun_gso_max_size) | .tun.endpoint-independent-nat = env(tun_endpoint_independent_nat) == 1 |
 		.dns.enable = env(dns_enable) | .dns.listen = env(dns_listen)
@@ -143,7 +178,7 @@ start_service() {
 		log "Mixin is enabled, mixin all config."
 		# do mixin
 		mode="$mode" match_process="$match_process" unify_delay="$unify_delay" tcp_concurrent="$tcp_concurrent" tcp_keep_alive_interval="$tcp_keep_alive_interval" log_level="$log_level" ipv6_proxy="$ipv6_proxy" \
-		ui_path="ui" api_listen="0.0.0.0:$api_port" api_secret="$api_secret" selection_cache="$selection_cache" \
+		ui_path="ui" ui_name="$ui_name" ui_url="$ui_url" api_listen="0.0.0.0:$api_port" api_secret="$api_secret" selection_cache="$selection_cache" \
 		allow_lan="$allow_lan" http_port="$http_port" socks_port="$socks_port" mixed_port="$mixed_port" redir_port="$redir_port" tproxy_port="$tproxy_port" \
 		tun_stack="$tun_stack" tun_device="$TUN_DEVICE" tun_mtu="$tun_mtu" tun_gso="$tun_gso" tun_gso_max_size="$tun_gso_max_size" tun_endpoint_independent_nat="$tun_endpoint_independent_nat" \
 		dns_enable="true" dns_listen="0.0.0.0:$dns_port" dns_mode="$dns_mode" fake_ip_range="$fake_ip_range" fake_ip_cache="$fake_ip_cache" \
@@ -153,7 +188,7 @@ start_service() {
 		geox_auto_update="$geox_auto_update" geox_update_interval="$geox_update_interval" \
 		yq -M -i '
 		.mode = env(mode) | .find-process-mode = env(match_process) | .unified-delay = env(unify_delay) == 1 | .tcp-concurrent = env(tcp_concurrent) == 1 | .keep-alive-interval = env(tcp_keep_alive_interval) | .log-level = env(log_level) | .ipv6 = env(ipv6_proxy) == 1 |
-		.external-ui = env(ui_path) | .external-controller = env(api_listen) | .secret = env(api_secret) | .profile.store-selected = env(selection_cache) == 1 |
+		.external-ui = env(ui_path) | .external-ui-name = env(ui_name) | .external-ui-url = env(ui_url) | .external-controller = env(api_listen) | .secret = env(api_secret) | .profile.store-selected = env(selection_cache) == 1 |
 		.allow-lan = env(allow_lan) == 1 | .port = env(http_port) | .socks-port = env(socks_port) | .mixed-port = env(mixed_port) | .redir-port = env(redir_port) | .tproxy-port = env(tproxy_port) |
 		.tun.stack = env(tun_stack) | .tun.device = env(tun_device) | .tun.mtu = env(tun_mtu) | .tun.gso = env(tun_gso) == 1 | .tun.gso-max-size = env(tun_gso_max_size) | .tun.endpoint-independent-nat = env(tun_endpoint_independent_nat) == 1 |
 		.dns.enable = env(dns_enable) | .dns.listen = env(dns_listen) | .dns.enhanced-mode = env(dns_mode) | .dns.fake-ip-range = env(fake_ip_range) | .profile.store-fake-ip = env(fake_ip_cache) == 1 |
@@ -195,7 +230,7 @@ start_service() {
 		fi
 		# mixin file
 		if [ -s "$MIXIN_FILE_PATH" ]; then
-			yq ea -M -i 'select(fi == 0) * select(fi == 1)' "$RUN_PROFILE_PATH" "$MIXIN_FILE_PATH"
+			yq ea -M -i '. as $item ireduce ({}; . * $item ) | ... comments=""' "$RUN_PROFILE_PATH" "$MIXIN_FILE_PATH"
 		fi
 	fi
 	if [ "$transparent_proxy_mode" == "tproxy" ]; then
@@ -250,11 +285,11 @@ start_service() {
 			log "Transparent Proxy: Using TPROXY mode."
 			if [ "$ipv4_proxy" == 1 ]; then
 				ip route add local default dev lo table "$ROUTE_TABLE"
-				ip rule add fwmark "$FW_MARK" table "$ROUTE_TABLE"
+				ip rule add pref "$RULE_PREF" fwmark "$FW_MARK/$FW_MARK_MASK" table "$ROUTE_TABLE"
 			fi
 			if [ "$ipv6_proxy" == 1 ]; then
 				ip -6 route add local default dev lo table "$ROUTE_TABLE"
-				ip -6 rule add fwmark "$FW_MARK" table "$ROUTE_TABLE"
+				ip -6 rule add pref "$RULE_PREF" fwmark "$FW_MARK/$FW_MARK_MASK" table "$ROUTE_TABLE"
 			fi
 		elif [ "$transparent_proxy_mode" == "tun" ]; then
 			log "Transparent Proxy: Using TUN mode."
@@ -263,14 +298,14 @@ start_service() {
 			$TUN_SH
 			if [ "$ipv4_proxy" == 1 ]; then
 				ip route add unicast default dev "$TUN_DEVICE" table "$ROUTE_TABLE"
-				ip rule add fwmark "$FW_MARK" table "$ROUTE_TABLE"
+				ip rule add pref "$RULE_PREF" fwmark "$FW_MARK/$FW_MARK_MASK" table "$ROUTE_TABLE"
 			fi
 			if [ "$ipv6_proxy" == 1 ]; then
 				ip -6 route add unicast default dev "$TUN_DEVICE" table "$ROUTE_TABLE"
-				ip -6 rule add fwmark "$FW_MARK" table "$ROUTE_TABLE"
+				ip -6 rule add pref "$RULE_PREF" fwmark "$FW_MARK/$FW_MARK_MASK" table "$ROUTE_TABLE"
 			fi
 		fi
-		nft -f "$HIJACK_NFT" -D FW_MARK="$FW_MARK" -D TUN_DEVICE="$TUN_DEVICE" -D MIHOMO_USER="$MIHOMO_USER" -D TPROXY_PORT="$tproxy_port" -D DNS_PORT="$dns_port"
+		nft -f "$HIJACK_NFT" -D FW_MARK="$FW_MARK" -D FW_MARK_MASK="$FW_MARK_MASK" -D TUN_DEVICE="$TUN_DEVICE" -D MIHOMO_USER="$MIHOMO_USER" -D TPROXY_PORT="$tproxy_port" -D DNS_PORT="$dns_port"
 		# dns hijack
 		if [ "$ipv4_dns_hijack" == 1 ]; then
 			log "Transparent Proxy: IPv4 DNS Hijack is enabled, IPv4 dns request will redirect to the core."
@@ -313,10 +348,6 @@ start_service() {
 		# exclusion
 		log "Transparent Proxy: Add exclusions."
 		add_wan_inbound_exclusions
-		add_firewall_exclusions
-		add_upnp_exclusions
-		# reload config
-		config_load mihomo
 		# router proxy
 		if [ "$router_proxy" == 1 ]; then
 			log "Transparent Proxy: Router Proxy is enabled, set proxy for router."
@@ -359,7 +390,7 @@ reload_service() {
 }
 
 service_triggers() {
-	procd_add_reload_trigger "mihomo" "firewall" "upnpd"
+	procd_add_reload_trigger "mihomo"
 
 	config_load mihomo
 	config_list_foreach "proxy" "wan_interfaces" add_reload_interface_trigger
@@ -398,29 +429,6 @@ log() {
 clear_all_log() {
 	echo -n > "$RUN_APP_LOG_PATH"
 	echo -n > "$RUN_CORE_LOG_PATH"
-}
-
-download_ui() {
-	local enabled="$1"
-	local url="$2"
-	local file_dir="$3"
-	local src_dir_name="$4"
-	local dest_dir_name="$5"
-	local file_path="$file_dir/$src_dir_name.tar.gz"
-	local src_dir="$file_dir/$src_dir_name"
-	local dest_dir="$file_dir/$dest_dir_name"
-	if [ "$enabled" == 1 ]; then
-		if [ ! -d "$dest_dir" ]; then
-			curl -s -L -o "$file_path" "$url"
-			tar -x -z -f "$file_path" -C "$file_dir"
-			rm -f "$file_path"
-			mv "$src_dir" "$dest_dir"
-		fi
-	else
-		if [ -d "$dest_dir" ]; then
-			rm -rf "$dest_dir"
-		fi
-	fi
 }
 
 mixin_authentications() {
@@ -551,7 +559,6 @@ add_acl_mac() {
 }
 
 add_wan_inbound_exclusions() {
-	config_load mihomo
 	config_list_foreach "proxy" "wan_interfaces" add_wan_inbound_exclusion
 	config_list_foreach "proxy" "wan6_interfaces" add_wan6_inbound_exclusion
 }
@@ -565,131 +572,18 @@ add_wan_inbound_exclusion() {
 }
 
 add_wan6_inbound_exclusion() {
-	local wan6_prefix
-	network_get_prefixes6 wan6_prefix $1
-	if [ -n "$wan6_prefix" ]; then
-		nft add element inet $FW_TABLE wan_ip6 \{ "$wan6_prefix" \}
-	fi
-}
-
-add_firewall_exclusions() {
-	config_load firewall
-	config_foreach add_firewall_rule_exclusion "rule"
-	config_foreach add_firewall_redirect_exclusion "redirect"
-}
-
-add_firewall_rule_exclusion() {
-	local section="$1"
-
-	local enabled name family proto src dest dest_ip dest_port
-	config_get_bool enabled "$section" "enabled" 1
-	config_get name "$section" "name"
-	config_get family "$section" "family"
-	config_get proto "$section" "proto"
-	config_get src "$section" "src"
-	config_get dest "$section" "dest"
-	config_get dest_port "$section" "dest_port"
-
-	if [[ "$enabled" == 0 || -z "$src" || -n "$dest" || -z "$dest_port" ]]; then
-		return
-	fi
-
-	local ipv4=0
-	local ipv6=0
-	if [ "$family" == "ipv4" ]; then
-		ipv4=1
-	elif [ "$family" == "ipv6" ]; then
-		ipv6=1
-	else [ -z "$family" ]
-		ipv4=1
-		ipv6=1
-	fi
-
-	local tcp=0
-	local udp=0
-	if [[ -z "$proto" || "$proto" == "all" ]]; then
-		tcp=1
-		udp=1
-	else
-		for p in $proto; do
-			[ "$p" == "tcp" ] && tcp=1
-			[ "$p" == "udp" ] && udp=1
+	local wan6_subnets wan6_subnet
+	network_get_subnets6 wan6_subnets $1
+	if [ -n "$wan6_subnets" ]; then
+		for wan6_subnet in $wan6_subnets; do
+			nft add element inet $FW_TABLE wan_ip6 \{ "$wan6_subnet" \}
 		done
 	fi
-
-	for port in $dest_port; do
-		if [ "$ipv4" == 1 ]; then
-			if [ "$tcp" == 1 ]; then
-				nft add element inet $FW_TABLE router_exclusion \{ ipv4 . tcp . "$port" \}
-			fi
-			if [ "$udp" == 1 ]; then
-				nft add element inet $FW_TABLE router_exclusion \{ ipv4 . udp . "$port" \}
-			fi
-		fi
-		if [ "$ipv6" == 1 ]; then
-			if [ "$tcp" == 1 ]; then
-				nft add element inet $FW_TABLE router_exclusion \{ ipv6 . tcp . "$port" \}
-			fi
-			if [ "$udp" == 1 ]; then
-				nft add element inet $FW_TABLE router_exclusion \{ ipv6 . udp . "$port" \}
-			fi
-		fi
-	done
-}
-
-add_firewall_redirect_exclusion() {
-	local section="$1"
-
-	local enabled name proto src_dport dest dest_ip dest_port
-	config_get_bool enabled "$section" "enabled" 1
-	config_get name "$section" "name"
-	config_get proto "$section" "proto"
-	config_get src_dport "$section" "src_dport"
-	config_get dest "$section" "dest"
-	config_get dest_ip "$section" "dest_ip"
-	config_get dest_port "$section" "dest_port"
-
-	if [ "$enabled" == 0 ]; then
-		return
-	fi
-
-	local tcp=0
-	local udp=0
-	if [[ -z "$proto" || "$proto" == "all" ]]; then
-		tcp=1
-		udp=1
-	else
-		for p in $proto; do
-			[ "$p" == "tcp" ] && tcp=1
-			[ "$p" == "udp" ] && udp=1
+	local wan6_prefixes wan6_prefix
+	network_get_prefixes6 wan6_prefixes $1
+	if [ -n "$wan6_prefixes" ]; then
+		for wan6_prefix in $wan6_prefixes; do
+			nft add element inet $FW_TABLE wan_ip6 \{ "$wan6_prefix" \}
 		done
 	fi
-
-	if [ -z "$dest_port" ]; then
-		dest_port="$src_dport"
-	fi
-
-	if [[ -z "$dest" || -z "$dest_ip" ]]; then
-		if [ "$tcp" == 1 ]; then
-			nft add element inet $FW_TABLE router_exclusion \{ ipv4 . tcp . "$dest_port" \}
-		fi
-		if [ "$udp" == 1 ]; then
-			nft add element inet $FW_TABLE router_exclusion \{ ipv4 . udp . "$dest_port" \}
-		fi
-	else
-		if [ "$tcp" == 1 ]; then
-			nft add element inet $FW_TABLE redirect_exclusion \{ tcp . "$dest_ip" . "$dest_port" \}
-		fi
-		if [ "$udp" == 1 ]; then
-			nft add element inet $FW_TABLE redirect_exclusion \{ udp . "$dest_ip" . "$dest_port" \}
-		fi
-	fi
-}
-
-add_upnp_exclusions() {
-	procd_open_instance upnp_watcher
-	procd_set_param command /bin/sh -c "$UPNP_WATCHER_SH"
-	procd_set_param data timestamp=$(date +%s)
-	procd_set_param respawn 3600 5 0
-	procd_close_instance
 }
