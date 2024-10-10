@@ -23,7 +23,7 @@ jobs:
         sudo timedatectl set-timezone "Asia/Shanghai"
 
     - name: Clone OpenWrt Packages
-      run: git clone https://github.com/kiddin9/openwrt-packages.git openwrt-packages
+      run: git clone https://github.com/kiddin9/kwrt-packages.git openwrt-packages
 
     - name: Remove . files and directories
       run: |
