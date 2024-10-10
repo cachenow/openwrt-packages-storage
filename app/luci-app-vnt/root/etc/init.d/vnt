@@ -4,6 +4,7 @@
 START=99
 USE_PROCD=1
 size="$(df -k | awk '/\/overlay$/ {sub(/K$/, "", $4); print $4}')"
+[ -z "$size" ] && size="$(df -k /usr/bin | awk 'NR==2 {print $(NF-2) }')"
 
 start_vntcli() {
                 local cfg="$1"
@@ -36,7 +37,7 @@ start_vntcli() {
 		if [ $(($($clibin -h | wc -l))) -lt 3 ] || [ ! -f "$clibin" ] ; then
 		 echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 未找到程序 $clibin 开始在线下载，下载较慢耐心等候" >>/tmp/vnt-cli.log
                  mkdir -p "$path"
-	         curl -o "${clibin}" --connect-timeout 10 --retry 3 "http://webd.liaoh.dedyn.io:19213/vnt-cli_${cpucore}"
+	         curl -o "${clibin}" --connect-timeout 10 --retry 3 "http://webd.liaoh.dedyn.io:19213/vnt-cli_${cpucore}" || wget -O "${clibin}" --timeout=10 --tries=3 "http://webd.liaoh.dedyn.io:19213/vnt-cli_${cpucore}"
                  chmod +x "$clibin"
  if [ $(($($clibin -h | wc -l))) -gt 3 ]; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : ${clibin} 下载成功" >>/tmp/vnt-cli.log
@@ -55,8 +56,8 @@ start_vntcli() {
                 ps | grep 'vnt-cli' | grep -v grep | awk '{print $1}' | xargs kill -9 >/dev/null 2>&1
 		local token mode ipaddr mtu desvice_id localadd log comp local_ipv4
 		local peeradd desvice_name vntshost stunhost checkip mapping disable_stats
-		local punch client_port par key forward serverw vntdns allow_wg
-		local finger relay first_latency tunname tunmode passmode
+		local punch client_port key forward serverw vntdns allow_wg
+		local finger relay first_latency tunname passmode
 		config_get token "$cfg" 'token'
                 config_get vntdns "$cfg" 'vntdns'
                 config_get desvice_id "$cfg" 'desvice_id'
@@ -106,7 +107,6 @@ if [ ! -z "$vntshost" ] ; then
 fi
                 config_get stunhost "$cfg" 'stunhost'
                 config_get client_port "$cfg" 'client_port'
-                config_get par "$cfg" 'par'
                 config_get punch "$cfg" 'punch' 'all'
                 config_get passmode "$cfg" 'passmode'
                 config_get peeradd "$cfg" 'peeradd'
@@ -114,7 +114,6 @@ fi
 		config_get mode "$cfg" 'mode'
 		config_get ipaddr "$cfg" 'ipaddr'
 		config_get mtu "$cfg" 'mtu'
-		config_get tunmode "$cfg" 'tunmode'
 		config_get tunname "$cfg" 'tunname'
 		config_get key "$cfg" 'key'
 		config_get relay "$cfg" 'relay'
@@ -220,13 +219,11 @@ EOF
                    done
                    fi
                 fi
-		[ -z "$par" ] || procd_append_param command --par "$par"
 		[ -z "$tunname" ] || procd_append_param command --nic "$tunname"
                 [ -z "$local_ipv4" ] || procd_append_param command --local-ipv4 "$local_ipv4"
-		procd_append_param command --punch "$punch"
+		[ "$punch" = "all" ] || procd_append_param command --punch "$punch"
 		[ "$passmode" != "off" ] && [ -n "$key" ] && procd_append_param command --model "$passmode"
 		[ "$passmode" != "off" ] && [ -n "$key" ] && procd_append_param command -w "$key"
-		[ "$tunmode" = "tun" ] || procd_append_param command -a
                 [ "$allow_wg" = "0" ] || procd_append_param command --allow-wg
 		[ "$forward" = "0" ] || procd_append_param command --no-proxy
 		[ "$finger" = "0" ] || procd_append_param command --finger
@@ -265,14 +262,14 @@ EOF
 		    uci set firewall.vntcli.dest_port="$vnt_tcp_port"
 		    uci set firewall.vntcli.enabled="1"
 	        fi
-		vnt_ip="$($clibin --info | awk -F 'Virtual ip:' {'print $2'} | tr -d ' \n')"
+		#vnt_ip="$($clibin --info | awk -F 'Virtual ip:' {'print $2'} | tr -d ' \n')"
                 if [ -z "$(uci -q get network.VNT)" ];  then				
 			uci set network.VNT='interface'
-			if [ -z "$vnt_ip" ]; then
+			if [ -z "$ipaddr" ]; then
 				uci set network.VNT.proto='none'
 			else
 				uci set network.VNT.proto='static'
-				uci set network.VNT.ipaddr=$vnt_ip
+				uci set network.VNT.ipaddr=$ipaddr
 				uci set network.VNT.netmask='255.0.0.0'
 			fi
                         uci set network.VNT.device=$vnt_tun
@@ -370,7 +367,7 @@ start_vnts() {
                      echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 无法替换，上传的程序不完整或自定义路径的可用空间不足，当前空间剩余${size}kb" >>/tmp/vnts.log
                    fi
                 fi
-                if [ ! -f "$vntsbin" ] && [ "$size" -lt 11000 ] ; then
+                if [ ! -f "$vntsbin" ] && [ "$size" -lt 10240 ] ; then
                     echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 自定义程序路径的可用空间不足，当前可用空间剩余${size}kb,自动切换为内存/tmp/vnts" >>/tmp/vnts.log
                     uci -q set vnt.@vnts[0].vntsbin=/tmp/vnts
                     uci commit
@@ -384,21 +381,22 @@ start_vnts() {
                 mkdir -p "$path"
                 proxy_url="https://hub.gitmirror.com/"
                 proxy_url2="http://gh.ddlc.top/"
+                tag=v1.2.12
 		case "${cpucore}" in 
-	           "mipsle")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-mipsel-unknown-linux-musl-1.2.12.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-mipsel-unknown-linux-musl-1.2.12.tar.gz"
+	           "mipsle")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-mipsel-unknown-linux-musl-${tag}.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-mipsel-unknown-linux-musl-${tag}.tar.gz" || wget --no-check-certificate -O /tmp/vnts.tar.gz --timeout=10 --tries=3 "https://dl.cnqq.cloudns.ch/https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-mipsel-unknown-linux-musl-${tag}.tar.gz"
 	           ;;
-	           "mips")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-mips-unknown-linux-musl-1.2.12.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-mips-unknown-linux-musl-1.2.12.tar.gz"
+	           "mips")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-mips-unknown-linux-musl-${tag}.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-mips-unknown-linux-musl-${tag}.tar.gz" || wget --no-check-certificate -O /tmp/vnts.tar.gz --timeout=10 --tries=3 "https://dl.cnqq.cloudns.ch/https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-mips-unknown-linux-musl-${tag}.tar.gz" 
 	           ;;
-	           "x86_64")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-x86_64-unknown-linux-musl-1.2.12.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-x86_64-unknown-linux-musl-1.2.12.tar.gz"
+	           "x86_64")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-x86_64-unknown-linux-musl-${tag}.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-x86_64-unknown-linux-musl-${tag}.tar.gz" || wget --no-check-certificate -O /tmp/vnts.tar.gz --timeout=10 --tries=3 "https://dl.cnqq.cloudns.ch/https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-x86_64-unknown-linux-musl-${tag}.tar.gz"
 	           ;;
 	           "i386")  echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 不支持的架构,程序退出" >>/tmp/vnts.log
                      return 1
 	           ;;
-	           "arm")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-arm-unknown-linux-musleabi-1.2.12.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-arm-unknown-linux-musleabi-1.2.12.tar.gz"
+	           "arm")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-arm-unknown-linux-musleabi-${tag}.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-arm-unknown-linux-musleabi-${tag}.tar.gz" || wget --no-check-certificate -O /tmp/vnts.tar.gz --timeout=10 --tries=3 "https://dl.cnqq.cloudns.ch/https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-arm-unknown-linux-musleabi-${tag}.tar.gz"
 	           ;;
-	           "armv7")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-armv7-unknown-linux-musleabi-1.2.12.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-armv7-unknown-linux-musleabi-1.2.12.tar.gz"
+	           "armv7")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-armv7-unknown-linux-musleabi-${tag}.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-armv7-unknown-linux-musleabi-${tag}.tar.gz" || wget --no-check-certificate -O /tmp/vnts.tar.gz --timeout=10 --tries=3 "https://dl.cnqq.cloudns.ch/https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-armv7-unknown-linux-musleabi-${tag}.tar.gz"
 	           ;;
-	           "aarch64")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-aarch64-unknown-linux-musl-1.2.12.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/1.2.12/vnts-aarch64-unknown-linux-musl-1.2.12.tar.gz"
+	           "aarch64")  curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-aarch64-unknown-linux-musl-${tag}.tar.gz" || curl -L -k -o /tmp/vnts.tar.gz --connect-timeout 10 --retry 3 "${proxy_url2}https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-aarch64-unknown-linux-musl-${tag}.tar.gz" || wget --no-check-certificate -O /tmp/vnts.tar.gz --timeout=10 --tries=3 "https://dl.cnqq.cloudns.ch/https://github.com/vnt-dev/vnts/releases/download/${tag}/vnts-aarch64-unknown-linux-musl-${tag}.tar.gz"
 	           ;;
                    esac
                    tar zxf /tmp/vnts.tar.gz -C /tmp/
@@ -436,7 +434,7 @@ start_vnts() {
 
 		if [ ! -z "$white_Token" ] ; then
                    if [[ "$(grep "list white_Token" /etc/config/vnt | awk '{print $3}' | wc -l ) " -eq 1 ]]; then
-                     procd_append_param command --white-token "$white_Tokenr"
+                     procd_append_param command --white-token "$white_Token"
                    else
                    for white_Tokens in $(cat /etc/config/vnt | grep 'list white_Token'  | awk -F 'list white_Token' '{print $2}' | sed "s/'/\n/g" | tr -d " ' "); do
                    procd_append_param command --white-token "$white_Tokens"
@@ -574,8 +572,8 @@ start_service() {
            [ "$mipstype" = "0" ] && cpucore="mips" || cpucore="mipsle"
         fi
         
-        [ -z "`opkg list-installed | grep curl`" ] && echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 未安装curl，请确定安装好curl " >>/tmp/vnt-cli.log 
-        [ -z "`opkg list-installed | grep luci-lib-fs`" ] && echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 未安装luci-lib-fs，请确定安装好luci-lib-fs " >>/tmp/vnt-cli.log 
+        #[ -z "`opkg list-installed | grep curl`" ] && echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 未安装curl，请确定安装好curl " >>/tmp/vnt-cli.log 
+        #[ -z "`opkg list-installed | grep luci-lib-fs`" ] && echo "$(date '+%Y-%m-%d %H:%M:%S') vnt : 未安装luci-lib-fs，请确定安装好luci-lib-fs " >>/tmp/vnt-cli.log 
 	config_foreach start_vntcli 'vnt-cli'
 	config_foreach start_vnts 'vnts'
 }

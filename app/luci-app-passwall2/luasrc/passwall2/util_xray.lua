@@ -1010,7 +1010,7 @@ function gen_config(var)
 					end
 				end
 			end)
-
+--[[
 			if default_outboundTag or default_balancerTag then
 				table.insert(rules, {
 					_flag = "default",
@@ -1020,7 +1020,7 @@ function gen_config(var)
 					network = "tcp,udp"
 				})
 			end
-
+]]
 			routing = {
 				domainStrategy = node.domainStrategy or "AsIs",
 				domainMatcher = node.domainMatcher or "hybrid",
@@ -1238,7 +1238,10 @@ function gen_config(var)
 					address = direct_dns_udp_server,
 					port = tonumber(direct_dns_udp_port) or 53,
 					network = "udp",
-					nonIPQuery = "skip"
+					nonIPQuery = "skip",
+					blockTypes = {
+						65
+					}
 				},
 				proxySettings = {
 					tag = "direct"

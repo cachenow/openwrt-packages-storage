@@ -1,12 +1,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=mihomo
-PKG_RELEASE:=36
+PKG_RELEASE:=7
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/MetaCubeX/mihomo.git
-PKG_SOURCE_DATE:=alpha
-PKG_SOURCE_VERSION:=53b2dbba62d298a6abbec23821f26eb538c50c91
+PKG_SOURCE_DATE:=2024-10-08
+PKG_SOURCE_VERSION:=08dcef80bf9a528d36cf8d516cc251f6449f9336
 PKG_MIRROR_HASH:=skip
 
 PKG_LICENSE:=MIT
@@ -16,7 +16,7 @@ PKG_BUILD_DEPENDS:=golang/host
 PKG_BUILD_PARALLEL:=1
 PKG_BUILD_FLAGS:=no-mips16
 
-PKG_BUILD_VERSION:=$(PKG_SOURCE_DATE)-$(shell printf '%.8s' $(PKG_SOURCE_VERSION))
+PKG_BUILD_VERSION:=alpha-08dcef8
 PKG_BUILD_TIME:=$(shell date -u -Iseconds)
 
 GO_PKG:=github.com/metacubex/mihomo
@@ -31,17 +31,19 @@ define Package/mihomo
   CATEGORY:=Network
   TITLE:=A rule based proxy in Go.
   URL:=https://wiki.metacubex.one
-  DEPENDS:=$(GO_ARCH_DEPENDS) +ca-bundle +curl +yq firewall4 +kmod-nft-tproxy +ip-full +kmod-tun
+  DEPENDS:=$(GO_ARCH_DEPENDS) +ca-bundle +curl +yq firewall4 +kmod-nft-tproxy +ip-full +kmod-tun +procd-ujail
   USERID:=mihomo=7890:mihomo=7890
 endef
 
 define Package/mihomo/description
- A rule based proxy in Go.
+  A rule based proxy in Go.
 endef
 
 define Package/mihomo/conffiles
 /etc/config/mihomo
 /etc/mihomo/mixin.yaml
+/etc/mihomo/nftables/reserved_ip.nft
+/etc/mihomo/nftables/reserved_ip6.nft
 endef
 
 define Package/mihomo/install
@@ -61,6 +63,8 @@ define Package/mihomo/install
 	$(INSTALL_BIN) $(CURDIR)/files/scripts/tun.sh $(1)/etc/mihomo/scripts/tun.sh
 
 	$(INSTALL_BIN) $(CURDIR)/files/nftables/hijack.nft $(1)/etc/mihomo/nftables/hijack.nft
+	$(INSTALL_BIN) $(CURDIR)/files/nftables/reserved_ip.nft $(1)/etc/mihomo/nftables/reserved_ip.nft
+	$(INSTALL_BIN) $(CURDIR)/files/nftables/reserved_ip6.nft $(1)/etc/mihomo/nftables/reserved_ip6.nft
 	$(INSTALL_BIN) $(CURDIR)/files/nftables/geoip_cn.nft $(1)/etc/mihomo/nftables/geoip_cn.nft
 	$(INSTALL_BIN) $(CURDIR)/files/nftables/geoip6_cn.nft $(1)/etc/mihomo/nftables/geoip6_cn.nft
 
@@ -71,11 +75,25 @@ define Package/mihomo/install
 	$(INSTALL_BIN) $(CURDIR)/files/mihomo.init $(1)/etc/init.d/mihomo
 
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) $(CURDIR)/files/uci-defaults/firewall.sh $(1)/etc/uci-defaults/99_firewall_mihomo
 	$(INSTALL_BIN) $(CURDIR)/files/uci-defaults/init.sh $(1)/etc/uci-defaults/99_init_mihomo
 	$(INSTALL_BIN) $(CURDIR)/files/uci-defaults/migrate.sh $(1)/etc/uci-defaults/99_migrate_mihomo
 
 	$(INSTALL_DIR) $(1)/etc/capabilities
 	$(INSTALL_DATA) $(CURDIR)/files/capabilities.json $(1)/etc/capabilities/mihomo.json
+
+	$(INSTALL_DIR) $(1)/lib/upgrade/keep.d
+	$(INSTALL_DATA) $(CURDIR)/files/mihomo.upgrade $(1)/lib/upgrade/keep.d/mihomo
+endef
+
+define Package/mihomo/postrm
+#!/bin/sh
+if [ -z $${IPKG_INSTROOT} ]; then
+	uci -q batch <<-EOF > /dev/null
+		del firewall.mihomo
+		commit firewall
+	EOF
+fi
 endef
 
 define Build/Prepare

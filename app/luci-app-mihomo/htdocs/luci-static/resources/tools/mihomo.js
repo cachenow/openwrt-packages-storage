@@ -8,18 +8,24 @@ const homeDir = '/etc/mihomo';
 const profilesDir = `${homeDir}/profiles`;
 const mixinFilePath = `${homeDir}/mixin.yaml`;
 const runDir = `${homeDir}/run`;
-const runAppLogPath = `${runDir}/app.log`;
-const runCoreLogPath = `${runDir}/core.log`;
 const runProfilePath = `${runDir}/config.yaml`;
+const logDir = `/var/log/mihomo`;
+const appLogPath = `${logDir}/app.log`;
+const coreLogPath = `${logDir}/core.log`;
+const nftDir = `${homeDir}/nftables`;
+const reservedIPNFT = `${nftDir}/reserved_ip.nft`;
+const reservedIP6NFT = `${nftDir}/reserved_ip6.nft`;
 
 return baseclass.extend({
     homeDir: homeDir,
     profilesDir: profilesDir,
     mixinFilePath: mixinFilePath,
     runDir: runDir,
-    runAppLogPath: runAppLogPath,
-    runCoreLogPath: runCoreLogPath,
+    appLogPath: appLogPath,
+    coreLogPath: coreLogPath,
     runProfilePath: runProfilePath,
+    reservedIPNFT: reservedIPNFT,
+    reservedIP6NFT: reservedIP6NFT,
 
     callServiceList: rpc.declare({
         object: 'service',
@@ -29,19 +35,19 @@ return baseclass.extend({
     }),
 
     getAppLog: function () {
-        return L.resolveDefault(fs.read_direct(this.runAppLogPath));
+        return L.resolveDefault(fs.read_direct(this.appLogPath));
     },
 
     getCoreLog: function () {
-        return L.resolveDefault(fs.read_direct(this.runCoreLogPath));
+        return L.resolveDefault(fs.read_direct(this.coreLogPath));
     },
 
     clearAppLog: function () {
-        return fs.exec_direct('/usr/libexec/mihomo-call', ['clear', 'app_log']);
+        return fs.exec_direct('/usr/libexec/mihomo-call', ['clear_log', 'app']);
     },
 
     clearCoreLog: function () {
-        return fs.exec_direct('/usr/libexec/mihomo-call', ['clear', 'core_log']);
+        return fs.exec_direct('/usr/libexec/mihomo-call', ['clear_log', 'core']);
     },
 
     listProfiles: function () {
@@ -65,11 +71,11 @@ return baseclass.extend({
     },
 
     appVersion: function () {
-        return L.resolveDefault(fs.exec_direct('/usr/libexec/mihomo-call', ['version', 'app']));
+        return L.resolveDefault(fs.exec_direct('/usr/libexec/mihomo-call', ['version', 'app']), 'Unknown');
     },
 
     coreVersion: function () {
-        return L.resolveDefault(fs.exec_direct('/usr/libexec/mihomo-call', ['version', 'core']));
+        return L.resolveDefault(fs.exec_direct('/usr/libexec/mihomo-call', ['version', 'core']), 'Unknown');
     },
 
     callMihomoAPI: async function (method, path, body) {
@@ -96,11 +102,11 @@ return baseclass.extend({
             const apiSecret = uci.get('mihomo', 'mixin', 'api_secret');
             let url;
             if (uiName) {
-                url = `http://${window.location.hostname}:${apiPort}/ui/${uiName}/#/setup?hostname=${window.location.hostname}&port=${apiPort}&secret=${apiSecret}`;
+                url = `http://${window.location.hostname}:${apiPort}/ui/${uiName}/?host=${window.location.hostname}&hostname=${window.location.hostname}&port=${apiPort}&secret=${apiSecret}`;
             } else {
-                url = `http://${window.location.hostname}:${apiPort}/ui/#/setup?hostname=${window.location.hostname}&port=${apiPort}&secret=${apiSecret}`;
+                url = `http://${window.location.hostname}:${apiPort}/ui/?host=${window.location.hostname}&hostname=${window.location.hostname}&port=${apiPort}&secret=${apiSecret}`;
             }
-            window.open(url, '_blank');
+            setTimeout(() => window.open(url, '_blank'), 0);
         } else {
             alert(_('Service is not running.'));
         }

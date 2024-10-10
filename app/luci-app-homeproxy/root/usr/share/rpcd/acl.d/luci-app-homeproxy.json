@@ -18,9 +18,6 @@
 			"file": {
 				"/tmp/homeproxy_certificate.tmp": [ "write" ]
 			},
-			"ubus": {
-				"rc": [ "init" ]
-			},
 			"uci": [ "homeproxy" ]
 		}
 	}
